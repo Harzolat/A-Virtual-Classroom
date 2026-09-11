@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Card, { CardHeader, CardTitle } from '../../components/common/Card';
@@ -29,19 +29,24 @@ import {
   AlertCircle,
   ExternalLink,
   Share2,
-  FolderDown
+  FolderDown,
+  Loader2
 } from 'lucide-react';
-import { MOCK_COURSES, MOCK_MATERIALS, MOCK_LECTURES, MOCK_ATTENDANCE } from '../../data/mockData';
+import { MOCK_COURSES } from '../../data/mockData';
+import { useLectures } from '../../context/LectureContext';
+import { useAuth } from '../../context/AuthContext';
+import { fetchCourseById, fetchMaterialsByCourse, downloadMaterial, fetchStudentAttendanceStats } from '../../services/api';
 
 export default function StudentCourseDetails() {
   const { courseId } = useParams();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
+  const { lectures } = useLectures();
 
-  // Selected course or fallback to COM 221
-  const course = MOCK_COURSES.find((c) => c.id === courseId) || MOCK_COURSES[0];
-  const courseMaterials = MOCK_MATERIALS.filter((m) => m.courseCode === course.code || m.courseId === course.id);
-  const courseLectures = MOCK_LECTURES.filter((l) => l.courseCode === course.code || l.courseId === course.id);
-  const attendanceRecord = MOCK_ATTENDANCE.find((a) => a.courseId === course.id || a.courseCode === course.code);
+  const [courseData, setCourseData] = useState(null);
+  const [courseMaterials, setCourseMaterials] = useState([]);
+  const [attendanceRecord, setAttendanceRecord] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   // States
   const [selectedModule, setSelectedModule] = useState(null);
@@ -52,6 +57,41 @@ export default function StudentCourseDetails() {
   const [contactMessage, setContactMessage] = useState('');
   const [contactSent, setContactSent] = useState(false);
   const [reviewedModules, setReviewedModules] = useState({});
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        setLoading(true);
+        const resolvedId = courseId || 'COM 221';
+        const [cData, mData, statsData] = await Promise.all([
+          fetchCourseById(resolvedId).catch(() => MOCK_COURSES.find((c) => c.id === resolvedId || c.code === resolvedId) || MOCK_COURSES[0]),
+          fetchMaterialsByCourse(resolvedId).catch(() => []),
+          currentUser?.id ? fetchStudentAttendanceStats(currentUser.id).catch(() => null) : Promise.resolve(null),
+        ]);
+        setCourseData(cData);
+        setCourseMaterials(mData || []);
+
+        if (statsData?.courses && cData) {
+          const match = statsData.courses.find(
+            (item) =>
+              (item.courseId && String(item.courseId) === String(cData._id || cData.id)) ||
+              (item.courseCode && item.courseCode === cData.code)
+          );
+          if (match) {
+            setAttendanceRecord(match);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load course details:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, [courseId, currentUser?.id]);
+
+  const course = courseData || MOCK_COURSES[0];
+  const courseLectures = lectures.filter((l) => l.courseCode === course.code || l.courseId === course._id || l.courseId === course.id);
 
   // Material filters
   const materialCategories = ['All', 'Lecture Notes', 'Lab Manual', 'Handout', 'Reference Guide'];
@@ -607,42 +647,45 @@ export default function StudentCourseDetails() {
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-[#5A5A40]" />
-                    Weekly Lecture Schedule
+                    Scheduled Sessions ({courseLectures.length})
                   </CardTitle>
                 </div>
               </CardHeader>
 
               <div className="space-y-2.5">
-                <div className="p-3 rounded-2xl bg-[#fafaf6] border border-[#e8e8dc] flex items-center justify-between text-xs">
-                  <div>
-                    <span className="font-bold text-[#2d2d2d] block">Monday</span>
-                    <span className="text-[11px] text-[#8e8e7a] flex items-center gap-1 mt-0.5">
-                      <Clock className="w-3 h-3" /> 10:00 AM - 12:00 PM
-                    </span>
+                {courseLectures.length > 0 ? (
+                  courseLectures.map((lec) => (
+                    <div key={lec.id} className="p-3 rounded-2xl bg-[#fafaf6] border border-[#e8e8dc] flex items-center justify-between text-xs gap-2">
+                      <div className="min-w-0">
+                        <span className="font-bold text-[#2d2d2d] block truncate">{lec.title}</span>
+                        <span className="text-[11px] text-[#8e8e7a] flex items-center gap-1 mt-0.5">
+                          <Clock className="w-3 h-3 shrink-0" /> {lec.dateFormatted || lec.date} ({lec.startTime} - {lec.endTime})
+                        </span>
+                      </div>
+                      <Badge
+                        variant={lec.status === 'Live Now' ? 'live' : lec.status === 'Completed' ? 'neutral' : 'clay'}
+                        size="sm"
+                        className="shrink-0"
+                      >
+                        {lec.status}
+                      </Badge>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-3 rounded-2xl bg-[#fafaf6] border border-[#e8e8dc] text-xs text-[#8e8e7a] text-center">
+                    No active sessions scheduled.
                   </div>
-                  <Badge variant="olive" size="sm">
-                    Main Lecture
-                  </Badge>
-                </div>
-
-                <div className="p-3 rounded-2xl bg-[#fafaf6] border border-[#e8e8dc] flex items-center justify-between text-xs">
-                  <div>
-                    <span className="font-bold text-[#2d2d2d] block">Thursday</span>
-                    <span className="text-[11px] text-[#8e8e7a] flex items-center gap-1 mt-0.5">
-                      <Clock className="w-3 h-3" /> 02:00 PM - 04:00 PM
-                    </span>
-                  </div>
-                  <Badge variant="clay" size="sm">
-                    Lab Session
-                  </Badge>
-                </div>
+                )}
               </div>
 
               <div className="mt-4 pt-3 border-t border-[#ecece2]">
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={() => navigate('/meeting/room-com221-live')}
+                  onClick={() => {
+                    const activeLec = courseLectures.find(l => l.status === 'Live Now') || courseLectures[0];
+                    navigate(`/meeting/${activeLec?.meetingId || 'room-com221-live'}`);
+                  }}
                   icon={Video}
                   className="w-full justify-center"
                 >

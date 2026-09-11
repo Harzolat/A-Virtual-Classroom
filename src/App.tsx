@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ClassroomProvider } from './context/ClassroomContext';
+import { LectureProvider } from './context/LectureContext';
 
 // Public Pages
 import LandingPage from './pages/public/LandingPage';
@@ -17,6 +18,7 @@ import StudentDashboard from './pages/student/StudentDashboard';
 import StudentCourses from './pages/student/StudentCourses';
 import StudentCourseDetails from './pages/student/StudentCourseDetails';
 import StudentLectures from './pages/student/StudentLectures';
+import StudentSessions from './pages/student/StudentSessions';
 import StudentAttendance from './pages/student/StudentAttendance';
 import StudentMaterials from './pages/student/StudentMaterials';
 import StudentNotifications from './pages/student/StudentNotifications';
@@ -29,6 +31,7 @@ import LecturerCourses from './pages/lecturer/LecturerCourses';
 import LecturerScheduleLecture from './pages/lecturer/LecturerScheduleLecture';
 import LecturerActiveLecture from './pages/lecturer/LecturerActiveLecture';
 import LecturerPreviousLectures from './pages/lecturer/LecturerPreviousLectures';
+import LecturerSessions from './pages/lecturer/LecturerSessions';
 import LecturerAttendance from './pages/lecturer/LecturerAttendance';
 import LecturerMaterials from './pages/lecturer/LecturerMaterials';
 import LecturerNotifications from './pages/lecturer/LecturerNotifications';
@@ -50,8 +53,9 @@ export default function App() {
   return (
     <AuthProvider>
       <ClassroomProvider>
-        <BrowserRouter>
-          <Routes>
+        <LectureProvider>
+          <BrowserRouter>
+            <Routes>
             {/* Public Routes */}
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
@@ -67,6 +71,7 @@ export default function App() {
             <Route path="/student/courses" element={<StudentCourses />} />
             <Route path="/student/courses/:courseId" element={<StudentCourseDetails />} />
             <Route path="/student/lectures" element={<StudentLectures />} />
+            <Route path="/student/sessions" element={<StudentSessions />} />
             <Route path="/student/attendance" element={<StudentAttendance />} />
             <Route path="/student/materials" element={<StudentMaterials />} />
             <Route path="/student/notifications" element={<StudentNotifications />} />
@@ -80,6 +85,7 @@ export default function App() {
             <Route path="/lecturer/lectures/create" element={<LecturerScheduleLecture />} />
             <Route path="/lecturer/lectures/active" element={<LecturerActiveLecture />} />
             <Route path="/lecturer/lectures" element={<LecturerPreviousLectures />} />
+            <Route path="/lecturer/sessions" element={<LecturerSessions />} />
             <Route path="/lecturer/attendance" element={<LecturerAttendance />} />
             <Route path="/lecturer/materials" element={<LecturerMaterials />} />
             <Route path="/lecturer/notifications" element={<LecturerNotifications />} />
@@ -102,7 +108,8 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>
-      </ClassroomProvider>
+      </LectureProvider>
+    </ClassroomProvider>
     </AuthProvider>
   );
 }

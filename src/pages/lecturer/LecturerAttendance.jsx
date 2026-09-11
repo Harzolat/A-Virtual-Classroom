@@ -1,66 +1,130 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Card, { CardHeader, CardTitle } from '../../components/common/Card';
 import Table from '../../components/common/Table';
 import Badge from '../../components/common/Badge';
 import Button from '../../components/common/Button';
 import Select from '../../components/common/Select';
-import { FileCheck, Download, Printer, Check, X, ShieldCheck } from 'lucide-react';
-import { MOCK_COURSES, MOCK_ATTENDANCE } from '../../data/mockData';
+import { Download, Printer, Check, X, ShieldCheck, RotateCw, AlertTriangle, Users } from 'lucide-react';
+import { fetchCourses, fetchCourseAttendanceStats, recordAttendance } from '../../services/api';
 
 export default function LecturerAttendance() {
-  const [selectedCourse, setSelectedCourse] = useState('COM 221');
+  const [courses, setCourses] = useState([]);
+  const [selectedCourseId, setSelectedCourseId] = useState('');
+  const [loadingCourses, setLoadingCourses] = useState(true);
+  const [loadingRoster, setLoadingRoster] = useState(false);
+  const [error, setError] = useState(null);
+  const [courseStats, setCourseStats] = useState(null);
+  const [studentRoster, setStudentRoster] = useState([]);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
-  const [studentRoster, setStudentRoster] = useState([
-    { id: '1', matricNo: 'F/HD/23/3210042', name: 'Adebayo Oluwaseun', status: 'Present', duration: '58 mins', rate: '92%' },
-    { id: '2', matricNo: 'F/HD/23/3210043', name: 'Fatima Mohammed', status: 'Present', duration: '60 mins', rate: '95%' },
-    { id: '3', matricNo: 'F/HD/23/3210044', name: 'Chukwuemeka Eze', status: 'Present', duration: '55 mins', rate: '88%' },
-    { id: '4', matricNo: 'F/HD/23/3210045', name: 'Aisha Bello', status: 'Present', duration: '60 mins', rate: '96%' },
-    { id: '5', matricNo: 'F/HD/23/3210046', name: 'Ibrahim Musa', status: 'Present', duration: '52 mins', rate: '85%' },
-    { id: '6', matricNo: 'F/HD/23/3210047', name: 'Ngozi Okonkwo', status: 'Absent', duration: '0 mins', rate: '68%' },
-    { id: '7', matricNo: 'F/HD/23/3210048', name: 'Tunde Bakare', status: 'Present', duration: '59 mins', rate: '90%' },
-  ]);
-
-  const toggleStudentStatus = (id) => {
-    setStudentRoster(prev => prev.map(s => {
-      if (s.id === id) {
-        return {
-          ...s,
-          status: s.status === 'Present' ? 'Absent' : 'Present'
-        };
+  // Load courses taught by lecturer
+  useEffect(() => {
+    async function loadCourses() {
+      try {
+        setLoadingCourses(true);
+        const data = await fetchCourses();
+        setCourses(data || []);
+        if (data && data.length > 0) {
+          setSelectedCourseId(data[0]._id);
+        }
+      } catch (err) {
+        console.error('Failed to load courses:', err);
+        setError(err.message || 'Failed to load assigned courses');
+      } finally {
+        setLoadingCourses(false);
       }
-      return s;
-    }));
+    }
+    loadCourses();
+  }, []);
+
+  // Load attendance roster for selected course
+  const loadCourseRoster = useCallback(async () => {
+    if (!selectedCourseId) return;
+    try {
+      setLoadingRoster(true);
+      setError(null);
+      const stats = await fetchCourseAttendanceStats(selectedCourseId);
+      setCourseStats(stats);
+      setStudentRoster(stats?.studentRoster || []);
+    } catch (err) {
+      console.error('Failed to load course attendance:', err);
+      setError(err.message || 'Failed to load attendance roster for course');
+    } finally {
+      setLoadingRoster(false);
+    }
+  }, [selectedCourseId]);
+
+  useEffect(() => {
+    loadCourseRoster();
+  }, [loadCourseRoster]);
+
+  const toggleStudentStatus = async (student) => {
+    const newStatus = student.status === 'Present' ? 'Absent' : 'Present';
+    // Optimistic UI update
+    setStudentRoster((prev) =>
+      prev.map((s) => (s.id === student.id ? { ...s, status: newStatus } : s))
+    );
+
+    try {
+      // Record attendance override to API
+      await recordAttendance({
+        studentId: student.id,
+        courseId: selectedCourseId,
+        status: newStatus,
+        reason: 'Lecturer Manual Override',
+      });
+    } catch (err) {
+      console.error('Failed to update student attendance:', err);
+      // Revert if failed
+      setStudentRoster((prev) =>
+        prev.map((s) => (s.id === student.id ? { ...s, status: student.status } : s))
+      );
+      alert(err.message || 'Failed to update attendance status.');
+    }
   };
 
   const columns = [
     {
       header: 'Matriculation No',
       key: 'matricNo',
-      render: (val) => <span className="font-mono text-xs font-bold text-[#5A5A40]">{val}</span>
+      render: (val) => (
+        <span className="font-mono text-xs font-bold text-[#5A5A40]">{val}</span>
+      ),
     },
     {
       header: 'Student Name',
       key: 'name',
-      render: (val) => <span className="text-xs font-bold text-[#2d2d2d]">{val}</span>
+      render: (val, row) => (
+        <div className="flex items-center gap-2">
+          {row.avatar && (
+            <img
+              src={row.avatar}
+              alt={val}
+              className="w-6 h-6 rounded-full object-cover border border-[#e0e0d6]"
+            />
+          )}
+          <span className="text-xs font-bold text-[#2d2d2d]">{val}</span>
+        </div>
+      ),
     },
     {
       header: 'Session Duration',
       key: 'duration',
-      render: (val) => <span className="text-xs font-mono text-[#555544]">{val}</span>
+      render: (val) => <span className="text-xs font-mono text-[#555544]">{val}</span>,
     },
     {
       header: 'Cumulative Rate',
-      key: 'rate',
-      render: (val) => {
-        const num = parseInt(val);
+      key: 'rateNumber',
+      render: (val, row) => {
+        const num = Number(row.rateNumber) || 0;
+        const isEligible = num >= 75;
         return (
-          <Badge variant={num >= 75 ? 'success' : 'danger'} size="sm">
-            {val} {num >= 75 ? '(Eligible)' : '(At Risk)'}
+          <Badge variant={isEligible ? 'success' : 'danger'} size="sm">
+            {row.rate} {isEligible ? '(Eligible)' : '(At Risk)'}
           </Badge>
         );
-      }
+      },
     },
     {
       header: 'Status & Manual Override',
@@ -69,20 +133,22 @@ export default function LecturerAttendance() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => toggleStudentStatus(row.id)}
-            className={`px-3 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+            onClick={() => toggleStudentStatus(row)}
+            className={`px-3 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
               val === 'Present'
-                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                : 'bg-rose-100 text-rose-800 border border-rose-300'
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200'
+                : 'bg-rose-100 text-rose-800 border border-rose-300 hover:bg-rose-200'
             }`}
           >
             {val === 'Present' ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
             <span>{val}</span>
           </button>
         </div>
-      )
-    }
+      ),
+    },
   ];
+
+  const currentCourse = courses.find((c) => c._id === selectedCourseId);
 
   return (
     <DashboardLayout title="Faculty Attendance Register">
@@ -101,6 +167,15 @@ export default function LecturerAttendance() {
           </div>
 
           <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="md"
+              onClick={loadCourseRoster}
+              icon={RotateCw}
+              disabled={loadingRoster}
+            >
+              Refresh
+            </Button>
             <Button
               variant="outline"
               size="md"
@@ -125,38 +200,74 @@ export default function LecturerAttendance() {
 
         {savedSuccess && (
           <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-semibold">
-            ✓ Attendance successfully submitted to Directorate of Academic Planning!
+            ✓ Attendance register successfully verified and submitted to Directorate of Academic Planning!
           </div>
         )}
 
-        {/* Filter controls */}
+        {error && (
+          <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl text-xs flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+              <span>{error}</span>
+            </div>
+            <button
+              onClick={loadCourseRoster}
+              className="text-xs font-bold underline hover:no-underline text-rose-900"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Filter and stats controls */}
         <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-          <div className="w-full sm:w-72">
+          <div className="w-full sm:w-80">
             <Select
               id="course-select"
               label="Select Course"
-              value={selectedCourse}
-              onChange={(e) => setSelectedCourse(e.target.value)}
-              options={MOCK_COURSES.map(c => ({ value: c.code, label: `${c.code} - ${c.title}` }))}
+              value={selectedCourseId}
+              onChange={(e) => setSelectedCourseId(e.target.value)}
+              options={courses.map((c) => ({
+                value: c._id,
+                label: `${c.code} - ${c.title}`,
+              }))}
             />
           </div>
 
-          <div className="text-xs text-[#7a7a6e]">
-            Showing roster for: <span className="font-bold text-[#2d2d2d]">Latest Live Session (COM 221)</span>
+          <div className="text-xs text-[#7a7a6e] flex items-center gap-4">
+            <span>
+              Enrolled Students: <strong className="text-[#2d2d2d]">{courseStats?.totalEnrolledStudents || 0}</strong>
+            </span>
+            <span>
+              Average Attendance: <strong className="text-[#5A5A40]">{courseStats?.averageAttendancePercentage || 0}%</strong>
+            </span>
           </div>
         </div>
 
         {/* Roster Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Enrolled Student Attendance Roster</CardTitle>
+            <div className="flex items-center justify-between w-full">
+              <CardTitle>
+                Enrolled Student Attendance Roster: {currentCourse ? `${currentCourse.code} - ${currentCourse.title}` : 'Selected Course'}
+              </CardTitle>
+              {loadingRoster && (
+                <RotateCw className="w-4 h-4 animate-spin text-[#5A5A40]" />
+              )}
+            </div>
           </CardHeader>
 
-          <Table
-            columns={columns}
-            data={studentRoster}
-            keyField="id"
-          />
+          {studentRoster.length > 0 ? (
+            <Table
+              columns={columns}
+              data={studentRoster}
+              keyField="id"
+            />
+          ) : (
+            <div className="p-8 text-center text-xs text-[#8e8e7a]">
+              {loadingRoster ? 'Loading course attendance roster...' : 'No enrolled students found for this course.'}
+            </div>
+          )}
         </Card>
       </div>
     </DashboardLayout>

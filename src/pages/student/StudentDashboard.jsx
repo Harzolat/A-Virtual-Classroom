@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useLectures } from '../../context/LectureContext';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import StatCard from '../../components/common/StatCard';
 import CourseCard from '../../components/common/CourseCard';
@@ -25,35 +26,53 @@ import {
   Sparkles
 } from 'lucide-react';
 import {
-  MOCK_COURSES,
-  MOCK_LECTURES,
-  MOCK_ATTENDANCE,
-  MOCK_NOTIFICATIONS,
-  MOCK_MATERIALS
+  MOCK_NOTIFICATIONS
 } from '../../data/mockData';
+import { fetchCourses, fetchMaterials, fetchStudentAttendanceStats } from '../../services/api';
 
 export default function StudentDashboard() {
   const { currentUser } = useAuth();
+  const { lectures } = useLectures();
   const navigate = useNavigate();
   const [lectureFilter, setLectureFilter] = useState('all'); // 'all' | 'live-upcoming' | 'completed'
+  const [registeredCourses, setRegisteredCourses] = useState([]);
+  const [materials, setMaterials] = useState([]);
+  const [attendanceRate, setAttendanceRate] = useState('91.5');
+  const [courseAttendance, setCourseAttendance] = useState([]);
 
-  // Dynamic calculations from mock data
-  const liveLecture = MOCK_LECTURES.find((l) => l.status === 'Live Now');
-  const upcomingLectures = MOCK_LECTURES.filter((l) => l.status === 'Scheduled');
-  const completedLectures = MOCK_LECTURES.filter((l) => l.status === 'Completed');
-  const registeredCourses = MOCK_COURSES;
+  useEffect(() => {
+    async function loadDashboardData() {
+      try {
+        const [coursesData, materialsData, statsData] = await Promise.all([
+          fetchCourses().catch(() => []),
+          fetchMaterials().catch(() => []),
+          currentUser?.id ? fetchStudentAttendanceStats(currentUser.id).catch(() => null) : Promise.resolve(null),
+        ]);
+        setRegisteredCourses(coursesData || []);
+        setMaterials(materialsData || []);
+        if (statsData) {
+          if (statsData.overallAttendanceRate !== undefined) {
+            setAttendanceRate(Number(statsData.overallAttendanceRate).toFixed(1));
+          }
+          if (Array.isArray(statsData.courses)) {
+            setCourseAttendance(statsData.courses);
+          }
+        }
+      } catch (err) {
+        console.error('Failed loading dashboard data:', err);
+      }
+    }
+    loadDashboardData();
+  }, [currentUser?.id]);
+
+  // Dynamic calculations from live/context data
+  const liveLecture = lectures.find((l) => l.status === 'Live Now');
+  const upcomingLectures = lectures.filter((l) => l.status === 'Scheduled');
+  const completedLectures = lectures.filter((l) => l.status === 'Completed');
   const recentNotifications = MOCK_NOTIFICATIONS.slice(0, 3);
-  const latestMaterial = MOCK_MATERIALS?.[0];
+  const latestMaterial = materials?.[0];
 
-  // Dynamic Overall Attendance Calculation
-  const totalAttendanceSum = Array.isArray(MOCK_ATTENDANCE)
-    ? MOCK_ATTENDANCE.reduce((acc, curr) => acc + (Number(curr.percentage) || 0), 0)
-    : 0;
-  const overallAttendance = (
-    Array.isArray(MOCK_ATTENDANCE) && MOCK_ATTENDANCE.length > 0
-      ? totalAttendanceSum / MOCK_ATTENDANCE.length
-      : 91.5
-  ).toFixed(1);
+  const overallAttendance = attendanceRate;
 
   // Total Credit Units calculation
   const totalCreditUnits = registeredCourses.reduce(
@@ -62,7 +81,7 @@ export default function StudentDashboard() {
   );
 
   // Filtered lectures for schedule display
-  const displayedLectures = MOCK_LECTURES.filter((lecture) => {
+  const displayedLectures = lectures.filter((lecture) => {
     if (lectureFilter === 'live-upcoming') {
       return lecture.status === 'Live Now' || lecture.status === 'Scheduled';
     }
@@ -333,7 +352,7 @@ export default function StudentDashboard() {
                 iconPosition="right"
                 className="w-full sm:w-auto"
               >
-                View Complete Lecture Timetable ({MOCK_LECTURES.length} Total)
+                View Complete Lecture Timetable ({lectures.length} Total)
               </Button>
             </div>
           </div>
@@ -347,17 +366,21 @@ export default function StudentDashboard() {
                   <CardTitle>Attendance Compliance</CardTitle>
                   <p className="text-xs text-[#7a7a6e]">NBTE 75% Examination Threshold</p>
                 </div>
-                <Badge variant="success" size="sm">
-                  Exam Eligible
+                <Badge
+                  variant={Number(overallAttendance) >= 75 ? 'success' : 'danger'}
+                  size="sm"
+                >
+                  {Number(overallAttendance) >= 75 ? 'Exam Eligible' : 'At Risk'}
                 </Badge>
               </CardHeader>
 
               <div className="space-y-3">
-                {Array.isArray(MOCK_ATTENDANCE) &&
-                  MOCK_ATTENDANCE.slice(0, 4).map((item) => {
-                    const isPassing = (item.percentage || 0) >= 75;
+                {courseAttendance.length > 0 ? (
+                  courseAttendance.slice(0, 4).map((item) => {
+                    const pct = Number(item.percentage) || 0;
+                    const isPassing = pct >= 75;
                     return (
-                      <div key={item.courseCode} className="space-y-1">
+                      <div key={item.courseId || item.courseCode} className="space-y-1">
                         <div className="flex items-center justify-between text-xs font-medium">
                           <div>
                             <span className="font-bold text-[#2d2d2d] mr-1.5">
@@ -372,24 +395,29 @@ export default function StudentDashboard() {
                               isPassing ? 'text-[#5A5A40]' : 'text-rose-600'
                             }`}
                           >
-                            {item.percentage}% ({item.attended}/{item.totalLectures || 14})
+                            {pct}% ({item.attended}/{item.totalLectures || 0})
                           </span>
                         </div>
                         <div className="w-full h-2 bg-[#eaeae0] rounded-full overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all ${
-                              item.percentage >= 80
+                              pct >= 80
                                 ? 'bg-[#5A5A40]'
-                                : item.percentage >= 75
+                                : pct >= 75
                                 ? 'bg-[#A67C52]'
                                 : 'bg-rose-600'
                             }`}
-                            style={{ width: `${item.percentage}%` }}
+                            style={{ width: `${Math.min(100, pct)}%` }}
                           />
                         </div>
                       </div>
                     );
-                  })}
+                  })
+                ) : (
+                  <p className="text-xs text-[#7a7a6e] py-3 text-center">
+                    No course attendance records found.
+                  </p>
+                )}
               </div>
 
               <div className="mt-4 pt-3 border-t border-[#ecece2] flex items-center justify-between">

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useClassroom } from '../../context/ClassroomContext';
 import { useAuth } from '../../context/AuthContext';
+import { recordAttendance, leaveAttendance, joinSession, leaveSession } from '../../services/api';
 import VideoTile from '../../components/classroom/VideoTile';
 import MeetingControls from '../../components/classroom/MeetingControls';
 import ParticipantList from '../../components/classroom/ParticipantList';
@@ -30,7 +31,7 @@ import {
 export default function VirtualClassroomPage() {
   const { meetingId } = useParams();
   const navigate = useNavigate();
-  const { role } = useAuth();
+  const { currentUser, role } = useAuth();
   const {
     activeLecture,
     sessionTimeElapsed,
@@ -47,6 +48,53 @@ export default function VirtualClassroomPage() {
 
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [showRoomInfoModal, setShowRoomInfoModal] = useState(false);
+  const [attendanceRecordId, setAttendanceRecordId] = useState(null);
+
+  // Auto-record attendance and join session when student enters classroom
+  useEffect(() => {
+    if (role !== 'student' || !currentUser?.id) return;
+    let isSubscribed = true;
+
+    async function recordEntry() {
+      try {
+        const identifier = meetingId || activeLecture?._id || activeLecture?.id;
+        if (identifier) {
+          // Attempt Phase 1I Session Join
+          try {
+            const res = await joinSession('lecture', String(identifier));
+            if (isSubscribed && res?.data?._id) {
+              setAttendanceRecordId(res.data._id);
+              return;
+            }
+          } catch (sessionErr) {
+            console.debug('Session join engine status:', sessionErr);
+          }
+
+          // Fallback to direct attendance record if needed
+          const lectureId = activeLecture?._id || activeLecture?.id;
+          if (lectureId) {
+            const res = await recordAttendance({
+              lectureId: String(lectureId),
+              studentId: currentUser.id,
+              timeJoined: new Date(),
+            });
+            if (isSubscribed && res?._id) {
+              setAttendanceRecordId(res._id);
+            }
+          }
+        }
+      } catch (err) {
+        // Attendance might already have been recorded for this session, which is fine
+        console.debug('Attendance record status:', err);
+      }
+    }
+
+    recordEntry();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [role, currentUser?.id, activeLecture?._id, activeLecture?.id, meetingId]);
 
   const slides = [
     {
@@ -84,7 +132,27 @@ export default function VirtualClassroomPage() {
     }
   ];
 
-  const handleLeave = () => {
+  const handleLeave = async () => {
+    const identifier = meetingId || activeLecture?._id || activeLecture?.id;
+    if (identifier && role === 'student') {
+      try {
+        await leaveSession('lecture', String(identifier), {
+          timeLeft: new Date(),
+        });
+      } catch (err) {
+        console.warn('Session leave call status:', err);
+      }
+    }
+
+    if (attendanceRecordId) {
+      try {
+        await leaveAttendance(attendanceRecordId, {
+          timeLeft: new Date(),
+        });
+      } catch (err) {
+        console.warn('Error recording leave attendance:', err);
+      }
+    }
     navigate(`/${role || 'student'}/dashboard`);
   };
 

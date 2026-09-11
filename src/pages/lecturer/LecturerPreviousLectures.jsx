@@ -6,10 +6,11 @@ import Table from '../../components/common/Table';
 import Badge from '../../components/common/Badge';
 import Button from '../../components/common/Button';
 import { Video, Download, Play, FileCheck } from 'lucide-react';
-import { MOCK_LECTURES } from '../../data/mockData';
+import { useLectures } from '../../context/LectureContext';
 
 export default function LecturerPreviousLectures() {
   const navigate = useNavigate();
+  const { lectures } = useLectures();
 
   const columns = [
     {
@@ -79,7 +80,7 @@ export default function LecturerPreviousLectures() {
         <Card>
           <Table
             columns={columns}
-            data={MOCK_LECTURES}
+            data={lectures}
             keyField="id"
           />
         </Card>

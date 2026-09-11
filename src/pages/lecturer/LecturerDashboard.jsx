@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useLectures } from '../../context/LectureContext';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import StatCard from '../../components/common/StatCard';
 import CourseCard from '../../components/common/CourseCard';
@@ -20,15 +21,16 @@ import {
   Video,
   Upload
 } from 'lucide-react';
-import { MOCK_COURSES, MOCK_LECTURES, MOCK_ATTENDANCE } from '../../data/mockData';
+import { MOCK_COURSES, MOCK_LECTURES } from '../../data/mockData';
 
 export default function LecturerDashboard() {
   const { currentUser } = useAuth();
+  const { lectures } = useLectures();
   const navigate = useNavigate();
 
   const assignedCourses = MOCK_COURSES.filter((c) => c.lecturer.includes('Adeleke') || c.code === 'COM 221' || c.code === 'COM 222');
-  const liveLecture = MOCK_LECTURES.find((l) => l.status === 'Live Now');
-  const nextScheduled = MOCK_LECTURES.find((l) => l.status === 'Scheduled');
+  const liveLecture = lectures.find((l) => l.status === 'Live Now');
+  const nextScheduled = lectures.find((l) => l.status === 'Scheduled');
 
   return (
     <DashboardLayout title="Lecturer Academic Console">
@@ -168,7 +170,7 @@ export default function LecturerDashboard() {
           </div>
 
           <div className="space-y-3">
-            {MOCK_LECTURES.map((lecture) => (
+            {lectures.map((lecture) => (
               <LectureCard
                 key={lecture.id}
                 lecture={lecture}

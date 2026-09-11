@@ -4,12 +4,15 @@ import Card from './Card';
 import Badge from './Badge';
 import Button from './Button';
 import Avatar from './Avatar';
-import { Video, Mic, Calendar, Clock, Users, ArrowRight, Radio } from 'lucide-react';
+import { Video, Mic, Calendar, Clock, Users, ArrowRight, Radio, Info, Bell, Check } from 'lucide-react';
 
 export default function LectureCard({
   lecture,
   role = 'student',
   onJoin,
+  onViewDetails,
+  onToggleReminder,
+  isReminded = false,
   className = ''
 }) {
   const navigate = useNavigate();
@@ -27,9 +30,9 @@ export default function LectureCard({
 
   return (
     <Card
-      className={`border-2 ${
+      className={`border-2 transition-all hover:shadow-md ${
         isLive
-          ? 'border-rose-400/80 bg-[#fffdfa] shadow-sm'
+          ? 'border-rose-400/80 bg-[#fffdfa] shadow-xs'
           : 'border-[#e0e0d6] bg-[#fdfcfb]'
       } ${className}`}
     >
@@ -45,9 +48,13 @@ export default function LectureCard({
               <Badge variant="info" size="sm" className="gap-1">
                 <Video className="w-3 h-3" /> Video Lecture
               </Badge>
-            ) : (
+            ) : lecture.type === 'Voice' ? (
               <Badge variant="warning" size="sm" className="gap-1">
                 <Mic className="w-3 h-3" /> Voice Session
+              </Badge>
+            ) : (
+              <Badge variant="clay" size="sm" className="gap-1">
+                <Users className="w-3 h-3" /> Physical / Practical
               </Badge>
             )}
 
@@ -67,10 +74,15 @@ export default function LectureCard({
           </div>
 
           <div>
-            <h4 className="font-serif text-lg font-bold text-[#2d2d2d] leading-snug">
+            <h4
+              onClick={() => onViewDetails && onViewDetails(lecture)}
+              className={`font-serif text-lg font-bold text-[#2d2d2d] leading-snug ${
+                onViewDetails ? 'cursor-pointer hover:text-[#5A5A40] transition-colors' : ''
+              }`}
+            >
               {lecture.title}
             </h4>
-            <p className="text-xs text-[#7a7a6e] line-clamp-1 mt-0.5">
+            <p className="text-xs text-[#7a7a6e] line-clamp-1 mt-0.5 font-medium">
               {lecture.courseTitle}
             </p>
           </div>
@@ -94,11 +106,46 @@ export default function LectureCard({
               />
               <span className="font-medium text-[#2d2d2d]">{lecture.lecturer}</span>
             </div>
+            {typeof lecture.attendeesCount === 'number' && (
+              <div className="flex items-center gap-1 text-[#8e8e7a]">
+                <Users className="w-3.5 h-3.5" />
+                <span>
+                  {isLive
+                    ? `${lecture.attendeesCount} Joined`
+                    : isPast
+                    ? `${lecture.attendeesCount} Attended`
+                    : `${lecture.maxCapacity || 150} Capacity`}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Right CTA */}
-        <div className="flex items-center gap-3 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-[#ecece2]">
+        <div className="flex flex-wrap items-center gap-2 shrink-0 pt-3 md:pt-0 border-t md:border-t-0 border-[#ecece2]">
+          {onViewDetails && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onViewDetails(lecture)}
+              icon={Info}
+            >
+              {isPast ? 'View Summary' : 'View Details'}
+            </Button>
+          )}
+
+          {!isLive && !isPast && onToggleReminder && (
+            <Button
+              variant={isReminded ? 'secondary' : 'clay'}
+              size="sm"
+              onClick={() => onToggleReminder(lecture)}
+              icon={isReminded ? Check : Bell}
+              className={isReminded ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : ''}
+            >
+              {isReminded ? 'Reminder Set' : 'Add Reminder'}
+            </Button>
+          )}
+
           {isLive ? (
             <Button
               variant="danger"
@@ -110,43 +157,36 @@ export default function LectureCard({
               {role === 'lecturer' ? 'Enter Classroom (Host)' : 'Join Virtual Classroom'}
             </Button>
           ) : isPast ? (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => alert(`Attendance recorded: ${lecture.attendanceRecorded || '92%'}`)}
-              >
-                View Attendance
-              </Button>
-              {lecture.hasRecording && (
+            !onViewDetails && (
+              <div className="flex items-center gap-2">
                 <Button
-                  variant="clay"
+                  variant="outline"
                   size="sm"
-                  onClick={() => alert('Accessing archived lecture recording...')}
+                  onClick={() => alert(`Attendance recorded: ${lecture.attendanceRecorded || '92%'}`)}
                 >
-                  Watch Recording
+                  View Attendance
                 </Button>
-              )}
-            </div>
+                {lecture.hasRecording && (
+                  <Button
+                    variant="clay"
+                    size="sm"
+                    onClick={() => alert('Accessing archived lecture recording...')}
+                  >
+                    Watch Recording
+                  </Button>
+                )}
+              </div>
+            )
           ) : (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => alert(`Lecture passkey: ${lecture.roomPasscode || 'ND2-CLASS'}`)}
-              >
-                Room Key
-              </Button>
-              <Button
-                variant="primary"
-                size="md"
-                onClick={handleJoin}
-                icon={ArrowRight}
-                iconPosition="right"
-              >
-                {role === 'lecturer' ? 'Start Session' : 'Ready to Join'}
-              </Button>
-            </div>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleJoin}
+              icon={ArrowRight}
+              iconPosition="right"
+            >
+              {role === 'lecturer' ? 'Start Session' : 'Ready to Join'}
+            </Button>
           )}
         </div>
       </div>

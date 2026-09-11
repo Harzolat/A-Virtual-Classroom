@@ -1,16 +1,51 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Card, { CardHeader, CardTitle } from '../../components/common/Card';
 import Badge from '../../components/common/Badge';
 import Button from '../../components/common/Button';
 import Avatar from '../../components/common/Avatar';
-import { Radio, Users, Video, Mic, Share2, Shield, PhoneOff, ArrowRight } from 'lucide-react';
+import { Radio, Users, Video, Mic, Share2, Shield, PhoneOff, ArrowRight, RefreshCw } from 'lucide-react';
 import { MOCK_CLASSROOM_PARTICIPANTS } from '../../data/mockData';
+import { fetchSessionParticipants } from '../../services/api';
 
 export default function LecturerActiveLecture() {
   const navigate = useNavigate();
-  const participants = MOCK_CLASSROOM_PARTICIPANTS;
+  const [liveData, setLiveData] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const loadParticipants = async () => {
+    try {
+      setIsLoading(true);
+      const data = await fetchSessionParticipants('lecture', 'room-com221-live');
+      if (data) {
+        setLiveData(data);
+      }
+    } catch {
+      // Graceful fallback for preview / offline
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadParticipants();
+  }, []);
+
+  const participants = liveData?.participants && liveData.participants.length > 0
+    ? liveData.participants.map(p => ({
+        id: p.attendanceId || p.studentId,
+        name: p.name,
+        matricNo: p.matricNo,
+        role: 'student',
+        avatar: p.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
+        status: p.status,
+        isActive: p.isActive,
+      }))
+    : MOCK_CLASSROOM_PARTICIPANTS;
+
+  const activeCount = liveData?.activeCount ?? 42;
+  const totalCount = liveData?.totalParticipants ?? 42;
 
   return (
     <DashboardLayout title="Active Classroom Control Room">
@@ -29,20 +64,31 @@ export default function LecturerActiveLecture() {
               Binary Search Trees & Tree Traversal Algorithms
             </h2>
             <p className="text-xs md:text-sm text-rose-800">
-              42 ND2 Students Currently Connected • Elapsed Time: 34 mins • Cloud Archival Running
+              {activeCount} ND2 Students Currently Connected • Elapsed Time: 34 mins • Cloud Archival Running
             </p>
           </div>
 
-          <Button
-            variant="danger"
-            size="lg"
-            onClick={() => navigate('/meeting/room-com221-live')}
-            icon={ArrowRight}
-            iconPosition="right"
-            className="shadow-lg"
-          >
-            Launch Virtual Classroom Arena
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="md"
+              onClick={loadParticipants}
+              icon={RefreshCw}
+              className="bg-white/80 text-rose-900 border-rose-200 hover:bg-white"
+            >
+              Sync Roster
+            </Button>
+            <Button
+              variant="danger"
+              size="lg"
+              onClick={() => navigate('/meeting/room-com221-live')}
+              icon={ArrowRight}
+              iconPosition="right"
+              className="shadow-lg"
+            >
+              Launch Virtual Classroom Arena
+            </Button>
+          </div>
         </div>
 
         {/* Live Metrics & Participant Overview */}
@@ -50,8 +96,8 @@ export default function LecturerActiveLecture() {
           <Card className="space-y-3">
             <h4 className="font-serif font-bold text-sm text-[#2d2d2d]">Attendance Real-Time</h4>
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-serif font-bold text-[#5A5A40]">42</span>
-              <span className="text-xs text-[#8e8e7a]">/ 45 Enrolled Students (93.3%)</span>
+              <span className="text-3xl font-serif font-bold text-[#5A5A40]">{activeCount}</span>
+              <span className="text-xs text-[#8e8e7a]">/ 45 Enrolled Students ({((activeCount / 45) * 100).toFixed(1)}%)</span>
             </div>
             <p className="text-xs text-emerald-700 font-semibold">✓ Compliant with NBTE Roster</p>
           </Card>
@@ -78,7 +124,14 @@ export default function LecturerActiveLecture() {
         {/* Live Student Grid Preview */}
         <Card>
           <CardHeader>
-            <CardTitle>Active Connected Classmates</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Active Connected Classmates ({participants.length})</CardTitle>
+              {liveData && (
+                <span className="text-xs text-emerald-800 font-semibold bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                  Live Attendance Synchronized
+                </span>
+              )}
+            </div>
           </CardHeader>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
@@ -95,9 +148,13 @@ export default function LecturerActiveLecture() {
                 />
                 <p className="text-xs font-bold text-[#2d2d2d] truncate w-full">{p.name}</p>
                 <p className="text-[10px] font-mono text-[#8e8e7a] truncate w-full">{p.matricNo || p.role}</p>
-                {p.hasHandRaised && (
+                {p.status ? (
+                  <Badge variant={p.status === 'Present' ? 'success' : 'warning'} size="xs">
+                    {p.status}
+                  </Badge>
+                ) : p.hasHandRaised ? (
                   <Badge variant="warning" size="sm">Hand Up</Badge>
-                )}
+                ) : null}
               </div>
             ))}
           </div>

@@ -8,27 +8,61 @@ import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import { Calendar, Clock, Video, Mic, Lock, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { MOCK_COURSES } from '../../data/mockData';
+import { useLectures } from '../../context/LectureContext';
+import { useAuth } from '../../context/AuthContext';
 
 export default function LecturerScheduleLecture() {
   const navigate = useNavigate();
+  const { addLecture } = useLectures();
+  const { currentUser } = useAuth();
+
   const [formData, setFormData] = useState({
     courseCode: 'COM 221',
     title: 'AVL Tree Rotations & Balanced Search Trees',
-    date: '2026-03-24',
+    date: '2026-08-20',
     startTime: '10:00',
     endTime: '12:00',
     type: 'Video',
     roomPasscode: 'COM221-TREE',
     description: 'Detailed analysis of Left-Left, Right-Right single rotations and composite double rotations in AVL self-balancing trees.'
   });
+  const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (submitting) return;
+
+    if (!formData.title || !formData.title.trim()) {
+      setErrorMsg('Please enter a valid lecture topic/title.');
+      return;
+    }
+    if (!formData.courseCode) {
+      setErrorMsg('Please select a course.');
+      return;
+    }
+    if (!formData.date) {
+      setErrorMsg('Please select a lecture date.');
+      return;
+    }
+
+    setSubmitting(true);
+    setErrorMsg('');
+
+    addLecture({
+      ...formData,
+      title: formData.title.trim(),
+      description: formData.description ? formData.description.trim() : '',
+      lecturer: currentUser?.name || 'Engr. Dr. K. A. Adeleke',
+      lecturerId: currentUser?.id || 'lec-1',
+      lecturerAvatar: currentUser?.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80'
+    });
+
     setSuccess(true);
     setTimeout(() => {
       navigate('/lecturer/dashboard');
-    }, 1500);
+    }, 1200);
   };
 
   return (
@@ -45,6 +79,12 @@ export default function LecturerScheduleLecture() {
             Notify enrolled students and generate a secure WebRTC classroom link with automated attendance recording.
           </p>
         </div>
+
+        {errorMsg && (
+          <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl text-xs font-semibold">
+            <span>{errorMsg}</span>
+          </div>
+        )}
 
         {success && (
           <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-semibold flex items-center gap-2">
@@ -155,10 +195,11 @@ export default function LecturerScheduleLecture() {
                 type="submit"
                 variant="primary"
                 size="md"
+                disabled={submitting}
                 icon={ArrowRight}
                 iconPosition="right"
               >
-                Publish & Notify Students
+                {submitting ? 'Publishing Lecture...' : 'Publish & Notify Students'}
               </Button>
             </div>
           </form>
